@@ -1,4 +1,5 @@
 # encoding: BINARY
+# frozen_string_literal: true
 Encoding.default_external = Encoding::BINARY
 Encoding.default_internal = Encoding::BINARY
 
@@ -29,16 +30,16 @@ class Hash
 end
 
 abort 'Usage: ruby main.rb <SPEC_DIR> <CONFIGS_DIR>' unless ARGV.size == 2
-spec_path = Pathname.new(ARGV[0]).cleanpath
-abort "File #{spec_path} not found!" unless spec_path.exist?
-configs_path = Pathname.new(ARGV[1]).cleanpath
-abort "Directory #{configs_path} not found!" unless configs_path.exist?
-enriched_path = configs_path.join('./enriched/').cleanpath
-enriched_path.mkdir rescue Errno::EEXIST
-client_args = Hash.new
-spec_order = Array.new
+SPEC_PATH = Pathname.new(ARGV[0]).cleanpath.freeze
+abort "File #{SPEC_PATH} not found!" unless SPEC_PATH.exist?
+CONFIGS_PATH = Pathname.new(ARGV[1]).cleanpath.freeze
+abort "Directory #{CONFIGS_PATH} not found!" unless CONFIGS_PATH.exist?
+ENRICHED_PATH = CONFIGS_PATH.join('./enriched/').cleanpath.freeze
+ENRICHED_PATH.mkdir rescue Errno::EEXIST
+CLIENT_ARGS = Hash.new
+SPEC_ORDER = Array.new
 
-spec_path.open(?r) do |spec_file|
+SPEC_PATH.open(?r) do |spec_file|
   current_client = nil
   current_section = nil
   
@@ -46,20 +47,20 @@ spec_path.open(?r) do |spec_file|
     if match_data = client_spec_line.match(/\[Client:(\w+)\]/) then
       current_client = match_data.captures[0]
       break if current_client == 'All'
-      client_args[current_client] ||= Hash.new
+      CLIENT_ARGS[current_client] ||= Hash.new
     elsif match_data = client_spec_line.match(/\[(\w+)\]/) then
       current_section = match_data.captures[0]
-      client_args[current_client][current_section] ||= Hash.new
+      CLIENT_ARGS[current_client][current_section] ||= Hash.new
     elsif match_data = client_spec_line.match(/(\w+) ?= ?(.+)/) then
       parameter, argument = match_data.captures
-      client_args[current_client][current_section][parameter] = argument
+      CLIENT_ARGS[current_client][current_section][parameter] = argument
     end
   end
   
-  spec_order = spec_file.each_line.map(&:chomp).to_a
+  SPEC_ORDER.concat(spec_file.each_line.map(&:chomp))
 end
 
-configs_path.glob('./*.conf') do |file_path|
+CONFIGS_PATH.glob('./*.conf') do |file_path|
   file_path.open(?r) do |config_file|
     pre_config_string = String.new
     config_hash = Hash.new
@@ -79,11 +80,11 @@ configs_path.glob('./*.conf') do |file_path|
       end
     end
     
-    client_args.keys.each do |client_title|
-      config_hash.merge!(client_args[client_title], true)
+    CLIENT_ARGS.keys.each do |client_title|
+      config_hash.merge!(CLIENT_ARGS[client_title], true)
       config_string = pre_config_string.dup
       
-      spec_order.each do |order_spec_line|
+      SPEC_ORDER.each do |order_spec_line|
         if section_match_data = order_spec_line.match(/\[(\w+)\]/) then
           current_section = section_match_data.captures[0]
           config_string << "[#{current_section}]\n"
@@ -96,12 +97,11 @@ configs_path.glob('./*.conf') do |file_path|
         end
       end
       
-      enriched_client_path = enriched_path.join(client_title).cleanpath
+      enriched_client_path = ENRICHED_PATH.join(client_title).cleanpath
       enriched_client_path.mkdir rescue Errno::EEXIST
       enriched_filename = enriched_client_path.join(file_path.basename).cleanpath
       enriched_filename.binwrite(config_string)
       puts("Wrote #{enriched_filename}")
     end
-    
   end
 end
