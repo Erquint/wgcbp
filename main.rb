@@ -4,6 +4,8 @@ Encoding.default_external = Encoding::BINARY
 Encoding.default_internal = Encoding::BINARY
 
 require 'pathname'
+require 'zlib'
+require 'rubygems/package'
 
 class Hash
   alias_method :original_merge, :merge
@@ -39,7 +41,7 @@ ENRICHED_PATH.mkdir rescue Errno::EEXIST
 CLIENT_ARGS = Hash.new
 SPEC_ORDER = Array.new
 
-SPEC_PATH.open(?r) do |spec_file|
+SPEC_PATH.open('rb') do |spec_file|
   current_client = nil
   current_section = nil
   
@@ -53,15 +55,15 @@ SPEC_PATH.open(?r) do |spec_file|
       CLIENT_ARGS[current_client][current_section] ||= Hash.new
     elsif match_data = client_spec_line.match(/(\w+) ?= ?(.+)/) then
       parameter, argument = match_data.captures
-      CLIENT_ARGS[current_client][current_section][parameter] = argument
+      CLIENT_ARGS[current_client][current_section][parameter.strip.downcase] = argument
     end
   end
   
   SPEC_ORDER.concat(spec_file.each_line.map(&:chomp))
 end
 
-CONFIGS_PATH.glob('./*.conf') do |file_path|
-  file_path.open(?r) do |config_file|
+CONFIGS_PATH.glob('./*.conf') do |config_file_path|
+  config_file_path.open('rb') do |config_file|
     pre_config_string = String.new
     config_hash = Hash.new
     current_section = nil
@@ -72,9 +74,9 @@ CONFIGS_PATH.glob('./*.conf') do |file_path|
         config_hash[section_title] ||= Hash.new
         current_section = section_title
       elsif parameter_match_data = config_line.match(/(\w+) ?= ?(.+)/) then
-        abort "Malformed input #{file_path}: parameter outside of sections!" unless current_section
+        abort "Malformed input #{config_file_path}: parameter outside of sections!" unless current_section
         parameter, argument = parameter_match_data.captures
-        config_hash[current_section][parameter] = argument
+        config_hash[current_section][parameter.strip.downcase] = argument
       elsif current_section.nil? then
         pre_config_string << "#{config_line}\n"
       end
@@ -91,17 +93,37 @@ CONFIGS_PATH.glob('./*.conf') do |file_path|
         elsif order_spec_line.empty? then
           config_string << ?\n
         else
-          argument = config_hash[current_section][order_spec_line]
-          next nil unless argument
-          config_string << "#{order_spec_line} = #{argument}\n"
+          next nil unless argument = config_hash[current_section][order_spec_line.strip.downcase]
+          config_string << "#{order_spec_line} = #{argument}\n".gsub(/,\s*/, ', ')
         end
       end
       
       enriched_client_path = ENRICHED_PATH.join(client_title).cleanpath
       enriched_client_path.mkdir rescue Errno::EEXIST
-      enriched_filename = enriched_client_path.join(file_path.basename).cleanpath
+      config_filename = config_file_path.basename('.conf').to_path[...32].concat('.conf')
+      enriched_filename = enriched_client_path.join(config_filename).cleanpath
       enriched_filename.binwrite(config_string)
       puts("Wrote #{enriched_filename}")
     end
   end
+end
+
+CLIENT_ARGS.keys.each do |client_title|
+  client_dir = ENRICHED_PATH.join(client_title).cleanpath
+  archive_path = ENRICHED_PATH.join("#{client_title}.tar.gz").cleanpath
+  
+  File.open(archive_path, 'wb') do |archive_file|
+    Zlib::GzipWriter.wrap(archive_file, Zlib::BEST_COMPRESSION, Zlib::DEFAULT_STRATEGY) do |gz|
+      Gem::Package::TarWriter.new(gz) do |tar|
+        client_dir.glob('./*.conf').each do |path|
+          content = path.binread
+          tar.add_file_simple(path.basename.to_s, 0o444, content.bytesize) do |io|
+            io.write(content)
+          end
+        end
+      end
+    end
+  end
+  
+  puts("Wrote #{archive_path}")
 end
