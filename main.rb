@@ -36,8 +36,8 @@ SPEC_PATH = Pathname.new(ARGV[0]).cleanpath.freeze
 abort "File #{SPEC_PATH} not found!" unless SPEC_PATH.exist?
 CONFIGS_PATH = Pathname.new(ARGV[1]).cleanpath.freeze
 abort "Directory #{CONFIGS_PATH} not found!" unless CONFIGS_PATH.exist?
-ENRICHED_PATH = CONFIGS_PATH.join('./enriched/').cleanpath.freeze
-ENRICHED_PATH.mkdir rescue Errno::EEXIST
+PROCESSED_PATH = CONFIGS_PATH.join('./processed/').cleanpath.freeze
+PROCESSED_PATH.mkdir rescue Errno::EEXIST
 CLIENT_ARGS = Hash.new
 SPEC_ORDER = Array.new
 
@@ -98,19 +98,19 @@ CONFIGS_PATH.glob('./*.conf') do |config_file_path|
         end
       end
       
-      enriched_client_path = ENRICHED_PATH.join(client_title).cleanpath
-      enriched_client_path.mkdir rescue Errno::EEXIST
+      processed_client_path = PROCESSED_PATH.join(client_title).cleanpath
+      processed_client_path.mkdir rescue Errno::EEXIST
       config_filename = config_file_path.basename('.conf').to_path[...32].concat('.conf')
-      enriched_filename = enriched_client_path.join(config_filename).cleanpath
-      enriched_filename.binwrite(config_string)
-      puts("Wrote #{enriched_filename}")
+      processed_filename = processed_client_path.join(config_filename).cleanpath
+      processed_filename.binwrite(config_string)
+      puts("Wrote #{processed_filename}")
     end
   end
 end
 
 CLIENT_ARGS.keys.each do |client_title|
-  client_dir = ENRICHED_PATH.join(client_title).cleanpath
-  archive_path = ENRICHED_PATH.join("#{client_title}.tar.gz").cleanpath
+  client_dir = PROCESSED_PATH.join(client_title).cleanpath
+  archive_path = PROCESSED_PATH.join("#{client_title}.tar.gz").cleanpath
   
   File.open(archive_path, 'wb') do |archive_file|
     Zlib::GzipWriter.wrap(archive_file, Zlib::BEST_COMPRESSION, Zlib::DEFAULT_STRATEGY) do |gz|
