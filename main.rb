@@ -7,30 +7,6 @@ require 'pathname'
 require 'zlib'
 require 'rubygems/package'
 
-class Hash
-  alias_method :original_merge, :merge
-  alias_method :original_merge!, :merge!
-
-  def merge(other_hash, recurse = false)
-    return original_merge(other_hash) unless recurse
-    return dup.merge!(other_hash, true)
-  end
-
-  def merge!(other_hash, recurse = false)
-    return original_merge!(other_hash) unless recurse
-    
-    other_hash.each do |key, other_value|
-      if self[key].is_a?(Hash) && other_value.is_a?(Hash) then
-        self[key].merge!(other_value, true)
-      else
-        self[key] = other_value
-      end
-    end
-    
-    return self
-  end
-end
-
 abort 'Usage: ruby main.rb <SPEC_DIR> <CONFIGS_DIR>' unless ARGV.size == 2
 SPEC_PATH = Pathname.new(ARGV[0]).cleanpath.freeze
 abort "File #{SPEC_PATH} not found!" unless SPEC_PATH.exist?
@@ -39,7 +15,7 @@ abort "Directory #{CONFIGS_PATH} not found!" unless CONFIGS_PATH.exist?
 PROCESSED_PATH = CONFIGS_PATH.join('./processed/').cleanpath.freeze
 PROCESSED_PATH.mkdir rescue Errno::EEXIST
 CLIENT_ARGS = Hash.new
-SPEC_ORDER = Array.new
+ORDER_SPEC = Array.new
 
 SPEC_PATH.open('rb') do |spec_file|
   current_client = nil
@@ -59,7 +35,8 @@ SPEC_PATH.open('rb') do |spec_file|
     end
   end
   
-  SPEC_ORDER.concat(spec_file.each_line.map(&:chomp))
+  CLIENT_ARGS.freeze
+  ORDER_SPEC.concat(spec_file.each_line.map(&:chomp))
 end
 
 CONFIGS_PATH.glob('./*.conf') do |config_file_path|
@@ -82,18 +59,20 @@ CONFIGS_PATH.glob('./*.conf') do |config_file_path|
       end
     end
     
+    config_hash.freeze
+    
     CLIENT_ARGS.keys.each do |client_title|
-      config_hash.merge!(CLIENT_ARGS[client_title], true)
       config_string = pre_config_string.dup
       
-      SPEC_ORDER.each do |order_spec_line|
+      ORDER_SPEC.each do |order_spec_line|
         if section_match_data = order_spec_line.match(/\[(\w+)\]/) then
           current_section = section_match_data.captures[0]
           config_string << "[#{current_section}]\n"
         elsif order_spec_line.empty? then
           config_string << ?\n
         else
-          next nil unless argument = config_hash[current_section][order_spec_line.strip.downcase]
+          parameter = order_spec_line.strip.downcase
+          next nil unless argument = CLIENT_ARGS[client_title].dig(current_section, parameter) || config_hash.dig(current_section, parameter)
           config_string << "#{order_spec_line} = #{argument}\n".gsub(/,\s*/, ', ')
         end
       end
@@ -103,7 +82,7 @@ CONFIGS_PATH.glob('./*.conf') do |config_file_path|
       config_filename = config_file_path.basename('.conf').to_path[...32].concat('.conf')
       processed_filename = processed_client_path.join(config_filename).cleanpath
       processed_filename.binwrite(config_string)
-      puts("Wrote #{processed_filename}")
+      puts("Wrote #{processed_filename.realpath}")
     end
   end
 end
@@ -125,5 +104,5 @@ CLIENT_ARGS.keys.each do |client_title|
     end
   end
   
-  puts("Wrote #{archive_path}")
+  puts("Wrote #{archive_path.realpath}")
 end
