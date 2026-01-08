@@ -16,6 +16,9 @@ PROCESSED_PATH = CONFIGS_PATH.join('./processed/').cleanpath.freeze
 PROCESSED_PATH.mkdir rescue Errno::EEXIST
 CLIENT_ARGS = Hash.new
 ORDER_SPEC = Array.new
+PROVIDER_CONFIG_TITLE_PATTERNS = {
+  /^(A)irVPN_([A-Z]{2})-(\w+?_\w+?)_UDP-\d+-Entry\d+$/ => '\1_\2_\3'
+}.freeze
 
 SPEC_PATH.open('rb') do |spec_file|
   current_client = nil
@@ -79,7 +82,13 @@ CONFIGS_PATH.glob('./*.conf') do |config_file_path|
       
       processed_client_path = PROCESSED_PATH.join(client_title).cleanpath
       processed_client_path.mkdir rescue Errno::EEXIST
-      config_filename = config_file_path.basename('.conf').to_path[...32].concat('.conf')
+      config_filename_stem = config_file_path.basename('.conf').to_s
+      
+      PROVIDER_CONFIG_TITLE_PATTERNS.each do |pattern, replacement|
+        break if config_filename_stem.sub!(pattern, replacement)
+      end
+      
+      config_filename = config_filename_stem[...32].concat('.conf')
       processed_filename = processed_client_path.join(config_filename).cleanpath
       processed_filename.binwrite(config_string)
       puts("Wrote #{processed_filename.realpath}")
