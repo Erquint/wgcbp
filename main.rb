@@ -17,7 +17,7 @@ PROCESSED_PATH.mkdir rescue Errno::EEXIST
 CLIENT_ARGS = Hash.new
 ORDER_SPEC = Array.new
 PROVIDER_CONFIG_TITLE_PATTERNS = {
-  /^(A)irVPN_([A-Z]{2})-(\w+?_\w+?)_UDP-\d+-Entry\d+$/ => '\1_\2_\3'
+  /^(A)irVPN_([A-Z]{2})-([\w-]+_[\w-]+)_UDP-\d+-Entry\d+$/ => '\1_\2_\3'
 }.freeze
 
 SPEC_PATH.open('rb') do |spec_file|
